@@ -172,6 +172,11 @@ class FrozenDQNAgentBase(DQNAgent):
         return self.losses
 
 class FrozenDQNAgentObs(FrozenDQNAgentBase):
+    """ Agent that takes into account the observation of nearby observations in its account
+
+    Args:
+        FrozenDQNAgentBase (_type_): _description_
+    """
 
     def __init__(self, y_dim:int, **kwargs) -> None:
         """
@@ -383,6 +388,12 @@ class FrozenDQNAgentObs(FrozenDQNAgentBase):
         #print(reward)
 
 class FrozenDoubleDQNAgent(FrozenDQNAgentBase):
+    """Double DQN Agent that uses two NN models to supposedly limit the bias in the DQN agent. (If one is subject to some
+    noise, the other one can limit its effect on the policy). Affects both the select action and optimize model.
+
+    Args:
+        FrozenDQNAgentBase (_type_): _description_
+    """
 
     def __init__(self, y_dim: int, **kwargs) -> None:
         super().__init__(y_dim, **kwargs)
