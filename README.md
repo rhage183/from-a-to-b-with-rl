@@ -1,6 +1,8 @@
 # From A to B with RL !
 
-Hello !
+Hello ! This is a repo from a LeWagon project in reinforcement learning where we have attempted (and succeded) at creating agents that could solve some of Gym environments.
+
+We have tried implementing DQN, doubleDQN, A2C (discrete and continuous action spaces) and PPO models on two environments (Frozen Lake and Car Racing)
 
 ## Setup
 
