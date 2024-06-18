@@ -18,6 +18,15 @@ from display import Plotter, dqn_diagnostics
 
 
 class CarDQNAgent(DQNAgent):
+    """
+    Inherits from DQNAgent methods like update model, save, load etc
+    Creates a DQN agent specific for car racing environment. Characterized by its policy and target nets.
+    Extra functionnalities allow for custom env.reset
+    Tracking of rewards per episode available
+
+    Args:
+        DQNAgent (_type_): _description_
+    """
 
     def __init__(self, y_dim: int, reward_threshold:float=20, reset_patience:int=250, **kwargs) -> None:
         self.policy_net = ConvDQN(y_dim, dropout_rate=kwargs.get('dropout_rate',0.0)).to(DEVICE)
@@ -46,9 +55,19 @@ class CarDQNAgent(DQNAgent):
             self.save_model()
 
     def prepro(self, state: torch.Tensor) -> torch.Tensor:
+        """Preprocesses the observation.
+        Picks the G out of R,G,B layers, normalizes intensities and crops the image
+
+        Args:
+            state (torch.Tensor): _description_
+
+        Returns:
+            torch.Tensor: _description_
+        """
 
         if state is None:
             return None
+
 
         crop_height = int(state.shape[1] * 0.88)
         crop_w = int(state.shape[2] * 0.07)
@@ -57,10 +76,6 @@ class CarDQNAgent(DQNAgent):
         gray = (g // 16) / 16
         gray = torch.moveaxis(gray, -1, 1)
 
-        # print(gray.shape)
-        # plt.imshow(gray[:,1,:,:], cmap='gray')
-        # plt.show()
-        # input('Continue ?')
         return gray
 
 
@@ -150,6 +165,7 @@ class CarDQNAgent(DQNAgent):
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
         # for each batch state according to policy_net
+
         state_action_values = self.policy_net(state_batch).gather(1, action_batch)
 
         # Compute V(s_{t+1}) for all next states.
@@ -157,6 +173,7 @@ class CarDQNAgent(DQNAgent):
         # on the "older" target_net; selecting their best reward with max(1).values
         # This is merged based on the mask, such that we'll have either the expected
         # state value or 0 in case the state was final.
+
         future_state_values = torch.zeros((BATCH_SIZE,5), dtype=torch.float32, device = DEVICE)
         rewards_tensor = torch.tile(reward_batch, (5,1)).T.to(DEVICE)
 
@@ -165,10 +182,6 @@ class CarDQNAgent(DQNAgent):
 
         future_state_values = (future_state_values * GAMMA) + rewards_tensor
         best_action_values = future_state_values.max(1).values
-
-        # print('\n\n')
-        # print(torch.cat((state_batch.unsqueeze(1), action_batch, future_state_values, best_action_values.unsqueeze(1)), dim=1))
-        # print('\n')
 
         # Compute MSE loss
         loss = self.lossfun(state_action_values, best_action_values.unsqueeze(1))
@@ -193,6 +206,8 @@ class CarDQNAgent(DQNAgent):
         lr = self.scheduler.optimizer.param_groups[0]['lr']
         act = self.last_action.item()
 
+
+        #Pretty printing
         print(f" 🏎️  🏎️  || {'t':7s} | {'Step':7s} | {'Episode':14s} | {'Loss':8s} |" \
             + f" {'ε':7s} | {'η':8s} | {'Rwd/ep':7s} | {'Action'}")
         print(f" 🏎️  🏎️  || " \
@@ -206,6 +221,17 @@ class CarDQNAgent(DQNAgent):
         return self.losses
 
     def update_memory(self, state, action, next_state, reward) -> bool:
+        """Function that updates the replay memory of the agent. Uses the .push method of the replay memory class
+
+        Args:
+            state (_type_): current state
+            action (_type_): current action
+            next_state (_type_): next state
+            reward (_type_): reward associated with current state and action
+
+        Returns:
+            bool: boolean indicating wether episode is done.
+        """
 
         self.rewards.append(reward[0].item())
         current_episode_rewards = sum(self.rewards[-self.episode_duration[-1]:])
@@ -225,6 +251,16 @@ class CarDQNAgent(DQNAgent):
 
 
 class CarA2CAgentDiscrete(SuperAgent):
+    """
+    Inherits from SuperAgent methods like update model, save, load etc
+    Creates an A2C agent specific for car racing environment in discrete mode (chooses from 5 different actions).
+    It is made out of a conv2D network common base feeding an actor and critic Linear neural networks
+    Extra functionnalities allow for custom env.reset
+    Tracking of rewards per episode available
+
+    Args:
+        SuperAgent (_type_): _description_
+    """
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
@@ -240,6 +276,15 @@ class CarA2CAgentDiscrete(SuperAgent):
         self.reset_patience = 250
 
     def prepro(self, state: torch.Tensor) -> torch.Tensor:
+        """Preprocesses the observation.
+        Picks the G out of R,G,B layers, normalizes intensities and crops the image
+
+        Args:
+            state (torch.Tensor): observation
+
+        Returns:
+            torch.Tensor: observation preprocessed
+        """
 
         if state is None:
             return None
@@ -251,10 +296,6 @@ class CarA2CAgentDiscrete(SuperAgent):
         gray = (g // 16) / 16
         gray = torch.moveaxis(gray, -1, 1)
 
-        # print(gray.shape)
-        # plt.imshow(gray[:,1,:,:], cmap='gray')
-        # plt.show()
-        # input('Continue ?')
         return gray
 
     def end_episode(self) -> None:
@@ -275,8 +316,8 @@ class CarA2CAgentDiscrete(SuperAgent):
     def select_action(self, act_space : torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         """
 
-        Agent selects one of four actions to take either as a prediction of the model or randomly:
-        The chances of picking a random action are high in the beginning and decrease with number of iterations
+        Agent selects one action to take according to the model prediction:
+        The exploration part of this algorythm should be implemented using entropy
 
         Args:
             act_space : Action space of environment
@@ -291,40 +332,28 @@ class CarA2CAgentDiscrete(SuperAgent):
             np.exp(-self.steps_done / EPS_DECAY)
         self.time = (datetime.now() - self.creation_time).total_seconds()
 
-        if self.steps_done % IDLENESS == 0:
-            self.steps_done+=1 #Update the number of steps within one episode
-            self.episode_duration[-1]+=1 #Update the duration of the current episode
-            if sample > self.epsilon or not self.exploration:
-                with torch.no_grad():
-                    # torch.no_grad() used when inference on the model is done
-                    # t.max(1) will return the largest column value of each row.
-                    # second column on max result is index of where max element was
-                    # found, so we pick action with the larger expected reward.
-
-                    _ , result = self.net(state)
-                    action = result.max(1).indices.view(1, 1)
-            else:
-                # If action is selected at random, give a bit of extra weight
-                # on hitting the gas
-                choice = np.random.choice(flatdim(act_space), p=[0.1, 0.2, 0.2, 0.3, 0.2])
-                action = torch.tensor([[choice]], device = DEVICE, dtype=torch.long)
+        with torch.no_grad():
+            # torch.no_grad() used when inference on the model is done
+            # t.max(1) will return the largest column value of each row.
+            # second column on max result is index of where max element was
+            # found, so we pick action with the larger expected reward.
+            _ , probs = self.net(state)
+            probs = probs.to('cpu').detach().numpy().T.squeeze(-1)
+            action = torch.tensor(np.random.choice(flatdim(act_space), p= probs))
+        self.last_action = action
 
 
-            self.last_action = action
-            return action
-        else:
-            self.steps_done+=1 #Update the number of steps within one episode
-            self.episode_duration[-1]+=1 #Update the duration of the current episode
-            return self.last_action
+        self.last_action = action
+        return action
 
 
     def optimize_model(self) -> list:
         """
 
         This function runs the optimization of the model:
-        it takes a batch from the buffer, creates the non final mask and computes:
-        Q(s_t, a) and V(s_{t+1}) to compute the Hubber Loss, performs backprop and then clips gradient
-        returns the computed loss
+        it takes a batch from the buffer, then computes the logits and value prediction from the actor and critic models:
+        Calculates the advantage then the corresponding losses (val_loss/pol_loss) and performs a gradient descent on their sum
+        returns the computed advantage for non breaking purposes
 
         Args:
             device (_type_, optional): Device to run computations on. Defaults to DEVICE.
@@ -387,6 +416,22 @@ class CarA2CAgentDiscrete(SuperAgent):
         return self.losses
 
     def update_memory(self, state, action, next_state, reward) -> None:
+        """
+        UPDATE_MEMORY (SUPER_AGENT) defines
+        what to do in general when we update the
+        agent memory.
+
+
+        Args:
+            state (_type_): current state
+            action (_type_): current action
+            next_state (_type_): next state
+            reward (_type_): reward associated with current state and action
+
+        Returns:
+            _type_: None
+        """
+
         self.rewards.append(reward[0].item())
 
         if self.episode_duration[-1] < 50: # On ne met pas en mémoire le zoom de début d'épisode
