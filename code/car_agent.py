@@ -461,6 +461,11 @@ class CarA2CAgentDiscrete(SuperAgent):
 
 
 class CarA2CAgentContinous(SuperAgent):
+    """Implements an A2C agent in car racing env with a continuous action space
+
+    Args:
+        SuperAgent (_type_): _description_
+    """
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
@@ -480,6 +485,15 @@ class CarA2CAgentContinous(SuperAgent):
         self.max_reward = 0
 
     def prepro(self, state: torch.Tensor) -> torch.Tensor:
+        """Preprocesses the observation.
+        Picks the G out of R,G,B layers, normalizes intensities and crops the image
+
+        Args:
+            state (torch.Tensor): observation
+
+        Returns:
+            torch.Tensor: preprocessed observation
+        """
 
         if state is None:
             return None
@@ -491,10 +505,6 @@ class CarA2CAgentContinous(SuperAgent):
         gray = (g  / 255)
         gray = torch.moveaxis(gray, -1, 1)
 
-        # print(gray.shape)
-        # plt.imshow(gray[:,1,:,:], cmap='gray')
-        # plt.show()
-        # input('Continue ?')
         return gray
 
     def end_episode(self) -> None:
@@ -515,8 +525,9 @@ class CarA2CAgentContinous(SuperAgent):
     def select_action(self, act_space : torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         """
 
-        Agent selects one of four actions to take either as a prediction of the model or randomly:
-        The chances of picking a random action are high in the beginning and decrease with number of iterations
+        Agent selects one of four actions to take as a prediction of the model.
+        Samples from a normal distribution whose parameters are the output of the actor model.
+        Exploration is controlled by entropy term
 
         Args:
             act_space : Action space of environment
@@ -526,9 +537,6 @@ class CarA2CAgentContinous(SuperAgent):
             act ActType : Action that the self performs
         """
         state = self.prepro(state)
-        #sample = random.random()
-        #self.epsilon = EPS_END + (EPS_START - EPS_END) * \
-            #np.exp(-self.steps_done / EPS_DECAY)
         self.time = (datetime.now() - self.creation_time).total_seconds()
 
         if self.steps_done % IDLENESS == 0:
@@ -565,9 +573,9 @@ class CarA2CAgentContinous(SuperAgent):
         """
 
         This function runs the optimization of the model:
-        it takes a batch from the buffer, creates the non final mask and computes:
-        Q(s_t, a) and V(s_{t+1}) to compute the Hubber Loss, performs backprop and then clips gradient
-        returns the computed loss
+        it takes a batch from the buffer, then computes the logits and value prediction from the actor and critic models:
+        Calculates the advantage then the corresponding losses (val_loss/pol_loss) and performs a gradient descent on their sum
+        returns the computed advantage for non breaking purposes
 
         Args:
             device (_type_, optional): Device to run computations on. Defaults to DEVICE.
@@ -646,10 +654,11 @@ class CarA2CAgentContinous(SuperAgent):
     def old_optimize_model(self) -> list:
         """
 
+        FIRST TRY AT DEFINING A LOSS | Not very optimized
         This function runs the optimization of the model:
-        it takes a batch from the buffer, creates the non final mask and computes:
-        Q(s_t, a) and V(s_{t+1}) to compute the Hubber Loss, performs backprop and then clips gradient
-        returns the computed loss
+        it takes a batch from the buffer, then computes the logits and value prediction from the actor and critic models:
+        Calculates the advantage then the corresponding losses (val_loss/pol_loss) and performs a gradient descent on their sum
+        returns the computed advantage for non breaking purposes
 
         Args:
             device (_type_, optional): Device to run computations on. Defaults to DEVICE.
@@ -766,6 +775,17 @@ class CarA2CAgentContinous(SuperAgent):
         return self.losses
 
     def update_memory(self, state, action, next_state, reward) -> None:
+        """pushes data into memory replay
+
+        Args:
+            state (_type_): current state
+            action (_type_): action
+            next_state (_type_): next state
+            reward (_type_): reward
+
+        Returns:
+            _type_: None
+        """
         self.rewards.append(reward[0].item())
 
         if self.episode_duration[-1] < 50: # On ne met pas en mémoire le zoom de début d'épisode
