@@ -8,11 +8,17 @@ The repo is implicitely separated into two sections (a Frozen Lake (FL) and a  C
 Here is a description for it:
 
 car_agent.py/frozen_agent.py : the agent classes that run the environments
+
 network.py : the NN used for the different agents
+
 environment.py : contains methods for running one step of the environment under different conditions
+
 car_race.py/frozen_lake.py : runs the main for each game
+
 buffer.py: Contains a Replay memory class that agents can batch from 
+
 display.py : Contains a Plotter class that allows to track metrics with time
+
 params.py : Hyperparameters used in each game
 
 ## Setup
