@@ -5,6 +5,11 @@ from params import MULTIFRAME
 
 
 class LinearDQN(nn.Module):
+    """Generic Simple DQN model. Well suited for frozen lake type environments.
+
+    Args:
+        nn (_type_): _description_
+    """
 
     def __init__(self, n_observations, n_actions):
         super(LinearDQN, self).__init__()
@@ -21,6 +26,12 @@ class LinearDQN(nn.Module):
 
 
 class LinearA2C(nn.Module):
+    """NN used in an A2C model with discrete input space. Consists of an actor and critic network, that return
+    logits of actions and value associated with chosen action
+
+    Args:
+        nn (_type_): _description_
+    """
 
     def __init__(self, n_observations, n_actions, *args, **kwargs) -> None:
 
@@ -38,12 +49,10 @@ class LinearA2C(nn.Module):
             nn.Linear(64,64), nn.ReLU(inplace = True),
             nn.Linear(in_features = 64, out_features = 1)
         )
-        # print(self.actor[0].weight)
 
     def forward(self, state, action = None):
 
         y_pol = self.actor(state)
-        # print(y_pol)
         if action is None:
             return None, y_pol
         y_val = self.critic(torch.concat((state,action), dim = 1))
@@ -51,6 +60,11 @@ class LinearA2C(nn.Module):
 
 
 class SmallConvDQN(nn.Module):
+    """Small conv DQN network with 2 2D cov layers followed by 1 layer of dense
+
+    Args:
+        nn (_type_): _description_
+    """
     def __init__(self, n_actions, dropout_rate=0.0):
         super(SmallConvDQN, self).__init__()
         self.conv1 = nn.Sequential(
@@ -72,6 +86,11 @@ class SmallConvDQN(nn.Module):
 
 
 class ConvDQN(nn.Module):
+    """Main ConvDQN network with 3 conv2D layers followed by 1 dense
+
+    Args:
+        nn (_type_): _description_
+    """
 
     def __init__(self, n_actions, dropout_rate=0.0):
         super(ConvDQN, self).__init__()
@@ -104,6 +123,13 @@ class ConvDQN(nn.Module):
 
 
 class ConvA2CDiscrete(nn.Module):
+    """
+    Network used for a COnvA2C in discrete mode. One conv2D base network that feeds into
+    critic and actor networks. Actor outputs logits of actions to be chosen, critic value associated with it
+
+    Args:
+        nn (_type_): _description_
+    """
 
     def __init__(self, n_actions, dropout_rate=0.0):
         super(ConvA2CDiscrete, self).__init__()
@@ -154,6 +180,13 @@ class ConvA2CDiscrete(nn.Module):
 
 
 class ConvA2CContinuousActor(nn.Module):
+    """Actor Network used for a COnvA2C in continuous mode. One conv2D base network that feeds into
+    actor networks. Actor outputs mu adn sigma for actions to be chosen
+
+
+    Args:
+        nn (_type_): _description_
+    """
 
     def __init__(self, n_actions, dropout_rate=0.0):
         super(ConvA2CContinuousActor, self).__init__()
@@ -202,6 +235,12 @@ class ConvA2CContinuousActor(nn.Module):
 
 
 class ConvA2CContinuousCritic(nn.Module):
+    """Critic Network used for a COnvA2C in continuous mode. One conv2D base network that feeds into
+    critic networks. critic outputs value
+
+    Args:
+        nn (_type_): _description_
+    """
 
     def __init__(self, dropout_rate=0.0):
         super(ConvA2CContinuousCritic, self).__init__()
