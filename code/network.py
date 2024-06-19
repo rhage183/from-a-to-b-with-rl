@@ -44,18 +44,16 @@ class LinearA2C(nn.Module):
         )
 
         self.critic = nn.Sequential(
-            nn.Linear(n_observations+1, out_features = 64), #Added the +1 to account for the action
+            nn.Linear(n_observations, out_features = 64), #Added the +1 to account for the action
             nn.ReLU(inplace = True),
             nn.Linear(64,64), nn.ReLU(inplace = True),
             nn.Linear(in_features = 64, out_features = 1)
         )
 
-    def forward(self, state, action = None):
+    def forward(self, state):
 
         y_pol = self.actor(state)
-        if action is None:
-            return None, y_pol
-        y_val = self.critic(torch.concat((state,action), dim = 1))
+        y_val = self.critic(state)
         return y_val, y_pol
 
 

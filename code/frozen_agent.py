@@ -11,6 +11,9 @@ from network import LinearDQN, LinearA2C
 from buffer import Transition
 from display import Plotter, dqn_diagnostics
 
+from gymnasium.spaces.utils import flatdim
+
+
 class FrozenDQNAgentBase(DQNAgent):
 
     def __init__(self, y_dim:int, **kwargs) -> None:
@@ -574,6 +577,13 @@ class FrozenDoubleDQNAgent(FrozenDQNAgentBase):
             self.targets_net[i].load_state_dict(target_net_state_dict)
 
 class FrozenA2CAgentBase(SuperAgent):
+    """ Simple A2C agent charcterized by an actor and a critic network.
+    Loss is optimized with log probs and advantage
+    Custom rewards added in update memory function
+
+    Args:
+        SuperAgent (_type_): _description_
+    """
 
     def __init__(self, y_dim:int, **kwargs) -> None:
         """
@@ -605,9 +615,8 @@ class FrozenA2CAgentBase(SuperAgent):
 
     def select_action(self, act_space : torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         """
-
-        Agent selects one of four actions to take either as a prediction of the model or randomly:
-        The chances of picking a random action are high in the beginning and decrease with number of iterations
+        Agent selects one of four actions to take either by sampling a the logit vector (output of the actor network):
+        Loss is calculated with log probs and advantage function
 
         Args:
             act_space : Action space of environment
@@ -624,19 +633,19 @@ class FrozenA2CAgentBase(SuperAgent):
         self.steps_done+=1 #Update the number of steps within one episode
         self.time = (datetime.now() - self.creation_time).total_seconds()
 
-        if sample > self.epsilon or not self.exploration:
-            with torch.no_grad():
-                # torch.no_grad() used when inference on the model is done
-                # t.max(1) will return the largest column value of each row.
-                # second column on max result is index of where max element was
-                # found, so we pick action with the larger expected reward.
-                _ , result = self.net(state)
-                action = result.max(0).indices.view(1, 1)
-        else:
-            action = torch.tensor([[act_space.sample()]], device = DEVICE, dtype=torch.long)
+        with torch.no_grad():
+            # torch.no_grad() used when inference on the model is done
+            # t.max(1) will return the largest column value of each row.
+            # second column on max result is index of where max element was
+            # found, so we pick action with the larger expected reward.
+            _ , probs = self.net(state)
+            probs = probs.to('cpu').detach().numpy().T
+            action = torch.tensor(np.random.choice(flatdim(act_space), p= probs)).unsqueeze(0)
 
         self.last_action = action
+
         return action
+
 
     def end_episode(self) -> None:
         """
@@ -692,42 +701,22 @@ class FrozenA2CAgentBase(SuperAgent):
         reward_batch = torch.cat(batch.reward)
 
 
-        y_val_pred, y_pol_pred = self.net(state_batch.unsqueeze(-1), action_batch)
-
-        # print(state_batch[0])
-        # print(f"y_pol_pred {y_pol_pred[0]}")
+        y_val_pred, y_pol_pred = self.net(state_batch.unsqueeze(-1))
         future_state_values = torch.zeros((BATCH_SIZE,1), dtype=torch.float32, device = DEVICE)
         # rewards_tensor = torch.tile(reward_batch, (4,1)).T.to(DEVICE)
 
-        # print(f" y val pred {y_val_pred}")
-        # print(f"y pol pred {y_pol_pred}")
         with torch.no_grad():
-            _, next_actions = self.net(non_final_next_states.unsqueeze(-1))
-            next_actions = next_actions.max(1).indices
-            future_state_values[non_final_mask,:], _ = self.net(non_final_next_states.unsqueeze(-1), next_actions.unsqueeze(-1))
+            future_state_values[non_final_mask,:], _ = self.net(non_final_next_states.unsqueeze(-1))
         y_val_true = reward_batch.unsqueeze(-1) + GAMMA * future_state_values
-
-        # print(f"future{future_state_values.shape}")
-        # print(reward_batch.shape)
-        # print(f"y pol pred {torch.log(y_pol_pred+1e-6)}")
-        # print(f"rewards_tensor {rewards_tensor}")
-        # print(f"y_val_true {y_val_true.shape}")
-        # print(f"y_val_pred {y_val_pred.shape}")
         adv = y_val_true - y_val_pred
-        # print(f"adv {adv.T}")
-        # print(f"adv {adv.T.shape}")
         val_loss = 0.5 * torch.square(adv)
         pol_loss = -(adv * torch.log(y_pol_pred+1e-6))
-        # print(f"y pol pred {torch.log(y_pol_pred+1e-6)[0]}")
-        # print(f"val loss {val_loss[0]}")
-        # print(f"pol loss {pol_loss[0]}")
+
 
         loss = (val_loss+pol_loss).mean()
         self.losses.append(float(loss))
         self.adv.append(float(adv[0][0]))
         self.pol_loss.append(float(pol_loss[0][0]))
-
-        # print(f"loss {loss}")
 
         #Plotting
         if self.steps_done % DISPLAY_EVERY == 0:
@@ -735,15 +724,12 @@ class FrozenA2CAgentBase(SuperAgent):
             Plotter().plot_data_gradually('Adv', self.adv)
             Plotter().plot_data_gradually('Rewards',
                                           self.episode_rewards,
-                                          cumulative=True,
                                           per_episode=True)
 
         self.optimizer.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_value_(self.net.parameters(), 25)
         self.optimizer.step()
-        # input('Continue?')
-
 
         # Fancy print
         rwd_ep = self.episode_rewards[-1]
@@ -771,20 +757,15 @@ class FrozenA2CAgentBase(SuperAgent):
         pass
 
     def update_memory(self, state, action, next_state, reward) -> None:
-        # print(state.item())
-        # print(len(self.already_there))
+        # Rewards the agent if it gets to a new state
         if state.item() not in self.already_there:
             self.already_there.append(state.item())
             reward +=0.01
 
-        # good_cases = [63,62,61,60,55,54,53,52,47,46,45,44,39,38,37,36,35,31,30,29,28]
+        # Rewards agent if it reaches certain states
         if int(state.item()) > 42:
             reward += 0.05
 
         self.memory.push(state, action, next_state, reward)
         self.rewards.append(reward[0].item())
-
-
-        #print(self.rewards)
-        #print(reward)
         return None
