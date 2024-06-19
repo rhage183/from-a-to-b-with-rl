@@ -440,6 +440,7 @@ class CarA2CAgentDiscrete(SuperAgent):
         state = self.prepro(state)
         next_state = self.prepro(next_state)
 
+        # Sets a -100 reward to the agent for not receiving a positive reward for the reset_patience number of frames
         if sum(self.rewards[-1*min(self.reset_patience,self.episode_duration[-1]):]) <= (self.reset_patience-1)*-0.1:
             reward[0]=-100
             self.memory.push(state, action, next_state, reward)
@@ -542,7 +543,6 @@ class CarA2CAgentContinous(SuperAgent):
         if self.steps_done % IDLENESS == 0:
             self.steps_done+=1 #Update the number of steps within one episode
             self.episode_duration[-1]+=1 #Update the duration of the current episode
-            # if sample > self.epsilon or not self.exploration:
             with torch.no_grad():
                 # torch.no_grad() used when inference on the model is done
                 # t.max(1) will return the largest column value of each row.
@@ -571,6 +571,8 @@ class CarA2CAgentContinous(SuperAgent):
 
     def optimize_model(self) -> list:
         """
+
+        UPDATED THE CALCULATION OF THE LOSS
 
         This function runs the optimization of the model:
         it takes a batch from the buffer, then computes the logits and value prediction from the actor and critic models:
@@ -655,6 +657,7 @@ class CarA2CAgentContinous(SuperAgent):
         """
 
         FIRST TRY AT DEFINING A LOSS | Not very optimized
+
         This function runs the optimization of the model:
         it takes a batch from the buffer, then computes the logits and value prediction from the actor and critic models:
         Calculates the advantage then the corresponding losses (val_loss/pol_loss) and performs a gradient descent on their sum
@@ -717,32 +720,15 @@ class CarA2CAgentContinous(SuperAgent):
         pol_loss = -(log_probs * adv)
 
         p1 = - (y_pol_mu_pred - action_batch).pow(2) / (2 * y_pol_sigma_pred)
-        # print('p1')
-        # print(p1)
-
         p2 = - torch.log(torch.square(2 * y_pol_sigma_pred * np.pi))
-        # print('p2')
-        # print(p2)
+
 
         pol_loss = (p1 + p2)
 
 
         # Entropy loss
-        # print(log_probs)
-        # print(action_batch)
-        # print(log_probs)
-        # print(y_pol_mu_pred)
-        # print(y_pol_sigma_pred)
-        # print('\n\n')
         entropy = dist.entropy().sum(axis=1)
-        # print("pol_loss")
-        # print(pol_loss.mean())
-        # print("val_loss")
-        # print(val_loss.mean())
         loss = (pol_loss + val_loss - ENTROPY_BETA * entropy).mean()
-        # print('loss')
-        # print(loss)
-        # print(loss.item())
         self.losses.append(float(loss))
 
         # if self.steps_done > 10:
@@ -794,6 +780,7 @@ class CarA2CAgentContinous(SuperAgent):
         state = self.prepro(state)
         next_state = self.prepro(next_state)
 
+        # Sets a -100 reward to the agent for not receiving a positive reward for the reset_patience number of frames
         if sum(self.rewards[-1*min(self.reset_patience,self.episode_duration[-1]):]) <= (self.reset_patience-1)*-0.1:
             reward[0]=-100
             self.memory.push(state, action, next_state, reward)
